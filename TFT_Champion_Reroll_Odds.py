@@ -57,7 +57,29 @@ class Game():
             if rolls > 200:
                 raise RollException("Too many rolls")
         return rolls
-        
+
+    """on this one we're going to ignore if the player already has this unit
+on his board.  if he does, imagine it's another player rolling for the unit."""
+    def rollFor2Star(self, tier, originalQuantity=1):
+        numNeeded = 3 - originalQuantity
+        rolls = 0
+        player = self.players[random.choice(tuple(range(8)))]
+        availableChampions = player.champPool.championsAvailable(tier, 0)
+        if sum(availableChampions) == 0:
+            raise championPoolDepletedException(f"How did you manage to deplete an entire champion pool?  Rolls: {rolls}")
+        championNumber = random.choices(self.champPool.championNumbers[tier], availableChampions)[0]
+        champion = Champion(tier, championNumber, 0)
+        assert type(champion) == Champion
+        while player.inShop(champion):
+            player.newShop()
+        while numNeeded > 0:
+            rolls += 1
+            player.newShop()
+            numNeeded -= player.buyChampion(champion)
+            if rolls > 200:
+                raise RollException("Too many rolls")
+        return rolls
+    
 class Champion():
     def __init__(self, tier, championNumber, starLevel):
         self.tier = tier
@@ -176,6 +198,25 @@ class Player():
         return (champion == self.shop[0] or champion == self.shop[1] or champion == self.shop[2] or
                champion == self.shop[3] or champion == self.shop[4])
 
+    """For this function, we will buy champions to the bench until we have the required number.
+We will ignore champions other than the one we are interested in, and will throw them back into
+the shop if they're not the one we want."""
+    def buyChampion(self, champion):
+        championsPurchased = 0
+        for i in range(5):
+            #found the champion in the shop.  time to buy!
+            if champion == self.shop[i]:
+                #look for an open spot on the bench (one that doesn't have this specific champion)
+                for j in range(7, 0, -1):
+                    if self.bench[j] !=champion:
+                        #if the spot is taken up by a real champion, send him back.
+                        if self.bench[j].tier >= 0:
+                            self.champPool.returnChampion(self.bench[j])
+                        self.bench[j] = champion
+                        championsPurchased += 1
+                        break
+        return championsPurchased
+
     def setUpRandomBoard(self):
         #we'll assume there's a triangle-likelihood for a champion to be on a bench.
         championsOnBench = random.choices((0,1,2,3,4,5,6,7,8), (10, 13, 15, 17, 20, 17, 15, 13, 10))[0]
@@ -239,7 +280,7 @@ class Player():
                 champion = Champion(tier, championNumber, starLevel)
                 return champion
 
-def howManyRolls(summonerLevel, tier, numgames = 400):
+def howManyRollsForOneUnit(summonerLevel, tier, numgames = 400):
     assert champOdds[summonerLevel][tier] > 0
     numRolls = deque(0 for i in range(numgames))
     for i in range(numgames):
@@ -251,11 +292,27 @@ def howManyRolls(summonerLevel, tier, numgames = 400):
             result = 200
             numRolls[i] = result
     expectedRolls = sum(numRolls) / 1000
-    print(f"At level {summonerLevel+1}, it takes {expectedRolls} rolls to find a given tier {tier+1} unit, for an expected cost of {2*expectedRolls}.")
+    print(f"At level {summonerLevel+1}, it takes {expectedRolls} rolls to find a given tier {tier+1} unit, for an expected cost of {2*expectedRolls}.  ")
+
+def howManyRollsForTwoStar(summonerLevel, tier, numgames = 400, originalQuantity = 1):
+    assert champOdds[summonerLevel][tier] > 0
+    numRolls = deque(0 for i in range(numgames))
+    for i in range(numgames):
+        game = Game(summonerLevel)
+        try:
+            result = game.rollFor2Star(tier)
+            numRolls[i] = result
+        except RollException:
+            result = 200
+            numRolls[i] = result
+    expectedRolls = sum(numRolls) / 1000
+    print(f"At level {summonerLevel+1}, it takes {expectedRolls} rolls to make a 2-star tier {tier+1} unit (starting with {originalQuantity}), for an expected cost of {2*expectedRolls}.  ")
+
 
 
 def calculateAllProbabilities(numgames = 400):
     for summonerLevel in range(9):
         for tier in tierList:
             if champOdds[summonerLevel][tier] > 0:
-                howManyRolls(summonerLevel, tier, numgames)
+                howManyRollsForOneUnit(summonerLevel, tier, numgames)
+                howManyRollsForTwoStar(summonerLevel, tier, numgames)
