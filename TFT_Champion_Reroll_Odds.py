@@ -64,11 +64,18 @@ on his board.  if he does, imagine it's another player rolling for the unit."""
         numNeeded = 3 - originalQuantity
         rolls = 0
         player = self.players[random.choice(tuple(range(8)))]
-        availableChampions = player.champPool.championsAvailable(tier, 0)
-        if sum(availableChampions) == 0:
-            raise championPoolDepletedException(f"How did you manage to deplete an entire champion pool?  Rolls: {rolls}")
+        availableChampions = self.champPool.championsAvailable(tier, 1)
+        tries = 0
+        while sum(availableChampions) == 0: #keep making new games until you get one you can actually get the 2-star
+            self.__init__(self.summonerLevel)
+            player = self.players[random.choice(tuple(range(8)))]
+            availableChampions = self.champPool.championsAvailable(tier, 1)
+            tries += 1
+            if tries == 30:
+                raise championPoolDepletedException(f"Issue creating game for 2 star rolling")
         championNumber = random.choices(self.champPool.championNumbers[tier], availableChampions)[0]
         champion = Champion(tier, championNumber, 0)
+        player.setNumChampions(champion, originalQuantity)
         assert type(champion) == Champion
         while player.inShop(champion):
             player.newShop()
@@ -80,6 +87,35 @@ on his board.  if he does, imagine it's another player rolling for the unit."""
                 raise RollException("Too many rolls")
         return rolls
     
+    """on this one we're going to only look at games where 3-starring is possible.
+We will restart the game if required to make this happen."""
+    def rollFor3Star(self, tier, originalQuantity=3):
+        numNeeded = 9 - originalQuantity
+        rolls = 0
+        player = self.players[random.choice(tuple(range(8)))]
+        availableChampions = self.champPool.championsAvailable(tier, 2)
+        tries = 0
+        while sum(availableChampions) == 0: #keep making new games until you get one you can actually get the 3-star
+            self.__init__(self.summonerLevel)
+            player = self.players[random.choice(tuple(range(8)))]
+            availableChampions = self.champPool.championsAvailable(tier, 2)
+            tries += 1
+            if tries == 100:
+                raise championPoolDepletedException(f"Issue creating game for 3 star rolling")
+        championNumber = random.choices(self.champPool.championNumbers[tier], availableChampions)[0]
+        champion = Champion(tier, championNumber, 0)
+        player.setNumChampions(champion, originalQuantity)
+        assert type(champion) == Champion
+        while player.inShop(champion):
+            player.newShop()
+        while numNeeded > 0:
+            rolls += 1
+            player.newShop()
+            numNeeded -= player.buyChampion(champion)
+            if rolls > 1000:
+                raise RollException("Too many rolls")
+        return rolls
+
 class Champion():
     def __init__(self, tier, championNumber, starLevel):
         self.tier = tier
@@ -87,7 +123,7 @@ class Champion():
         assert starLevel in (0,1,2)
         self.starLevel = starLevel
     def __eq__(self, other):
-        return(self.tier == other.tier and self.championNumber == other.championNumber and self.starLevel == other.starLevel)
+        return(self.tier == other.tier and self.championNumber == other.championNumber)
 
 def emptyChampion():
     champion = Champion(-1,-1,0)
@@ -121,6 +157,7 @@ class ChampPool():
         tierOdds = champOdds[summonerLevel]
         selectedTier = random.choices(tierList,tierOdds)[0]
         return selectedTier
+    
     """Given a summoner level, choose a champion from the champion pool.
 This function will always remove one champion from the pool.  To return a
 champion back to the pool, call the returnChampion function on the champion
@@ -184,6 +221,74 @@ class Player():
         self.shop = deque(templist)
         for i in self.shop:
             assert(type(i) == Champion)
+
+    def clearBoardandBench(self, champion):
+        for i in range(len(self.bench)):            
+            if self.bench[i] == champion:
+                self.champPool.returnChampion(self.bench[i])
+                self.bench[i] = emptyChampion()
+        for i in range(len(self.board)):
+            if self.board[i] == champion:
+                self.champPool.returnChampion(self.board[i])
+                self.board[i] = emptyChampion()
+
+    """Erase the player's bench and board and add champions to the board until the correct number is reached."""
+    def setNumChampions(self, champion, requiredNum):
+        count = 0
+        self.clearBoardandBench(champion)
+        for i in range(len(self.board)):
+            if requiredNum >= 3:
+                newChamp = Champion(champion.tier, champion.championNumber, 1)
+                countAdd = 3
+            else:
+                newChamp = Champion(champion.tier, champion.championNumber, 0)
+                countAdd = 1
+            if self.board[i].tier < 0:
+                self.champPool.pullChampionFromPool(newChamp)
+                self.board[i] = newChamp
+                count += countAdd
+            if count == requiredNum:
+                break
+        if count == requiredNum:
+            return
+        for i in range(len(self.bench)):
+            if requiredNum >= 3:
+                newChamp = Champion(champion.tier, champion.championNumber, 1)
+                countAdd = 3
+            else:
+                newChamp = Champion(champion.tier, champion.championNumber, 0)
+                countAdd = 1
+            if self.bench[i].tier < 0:
+                self.champPool.pullChampionFromPool(newChamp)
+                self.bench[i] = newChamp
+                count += countAdd
+            if count == requiredNum:
+                break
+        #it's possible the board was super stacked and we couldn't get enough.
+        #in this case, replace other units.
+        if count != requiredNum:            
+            for i in range(len(self.board)):
+                if requiredNum >= 3:
+                    newChamp = Champion(champion.tier, champion.championNumber, 1)
+                    countAdd = 3
+                else:
+                    newChamp = Champion(champion.tier, champion.championNumber, 0)
+                    countAdd = 1
+                if not self.board[i] == newChamp:
+                    self.champPool.pullChampionFromPool(newChamp)
+                    self.board[i] = newChamp
+                    count += countAdd
+                if count == requiredNum:
+                    break
+            
+    def countChampions(self, champion):
+        count = 0
+        for heldChampion in self.bench:
+            if heldChampion == champion:
+                count += starLevelLookup[heldChampion.starLevel]
+        for heldChampion in self.board:
+            if heldChampion == champion:
+                count += starLevelLookup[heldChampion.starLevel]
 
     def newShop(self):
         for champion in self.shop:
@@ -308,6 +413,19 @@ def howManyRollsForTwoStar(summonerLevel, tier, numgames = 400, originalQuantity
     expectedRolls = sum(numRolls) / 1000
     print(f"At level {summonerLevel+1}, it takes {expectedRolls} rolls to make a 2-star tier {tier+1} unit (starting with {originalQuantity}), for an expected cost of {2*expectedRolls}.  ")
 
+def howManyRollsForThreeStar(summonerLevel, tier, numgames = 400, originalQuantity = 3):
+    assert champOdds[summonerLevel][tier] > 0
+    numRolls = deque(0 for i in range(numgames))
+    for i in range(numgames):
+        game = Game(summonerLevel)
+        try:
+            result = game.rollFor3Star(tier)
+            numRolls[i] = result
+        except RollException:
+            result = 200
+            numRolls[i] = result
+    expectedRolls = sum(numRolls) / 1000
+    print(f"At level {summonerLevel+1}, it takes {expectedRolls} rolls to make a 3-star tier {tier+1} unit (starting with {originalQuantity}), for an expected cost of {2*expectedRolls}.  ")
 
 
 def calculateAllProbabilities(numgames = 400):
@@ -316,3 +434,4 @@ def calculateAllProbabilities(numgames = 400):
             if champOdds[summonerLevel][tier] > 0:
                 howManyRollsForOneUnit(summonerLevel, tier, numgames)
                 howManyRollsForTwoStar(summonerLevel, tier, numgames)
+                howManyRollsForThreeStar(summonerLevel, tier, numgames)
