@@ -398,6 +398,7 @@ def howManyRollsForOneUnit(summonerLevel, tier, numgames = 400):
             numRolls[i] = result
     expectedRolls = sum(numRolls) / 1000
     print(f"At level {summonerLevel+1}, it takes {expectedRolls} rolls to find a given tier {tier+1} unit, for an expected cost of {2*expectedRolls}.  ")
+    return expectedRolls
 
 def howManyRollsForTwoStar(summonerLevel, tier, numgames = 400, originalQuantity = 1):
     assert champOdds[summonerLevel][tier] > 0
@@ -412,6 +413,7 @@ def howManyRollsForTwoStar(summonerLevel, tier, numgames = 400, originalQuantity
             numRolls[i] = result
     expectedRolls = sum(numRolls) / 1000
     print(f"At level {summonerLevel+1}, it takes {expectedRolls} rolls to make a 2-star tier {tier+1} unit (starting with {originalQuantity}), for an expected cost of {2*expectedRolls}.  ")
+    return expectedRolls
 
 def howManyRollsForThreeStar(summonerLevel, tier, numgames = 400, originalQuantity = 3):
     assert champOdds[summonerLevel][tier] > 0
@@ -426,12 +428,25 @@ def howManyRollsForThreeStar(summonerLevel, tier, numgames = 400, originalQuanti
             numRolls[i] = result
     expectedRolls = sum(numRolls) / 1000
     print(f"At level {summonerLevel+1}, it takes {expectedRolls} rolls to make a 3-star tier {tier+1} unit (starting with {originalQuantity}), for an expected cost of {2*expectedRolls}.  ")
+    return expectedRolls
 
 
 def calculateAllProbabilities(numgames = 400):
+    output = "level,tier,1St,2St,3St\n"
+    rollList = []
     for summonerLevel in range(9):
-        for tier in tierList:
+        levelList = []
+        rollList.append(levelList)
+        for tier in range(5):
+            tierList = []
             if champOdds[summonerLevel][tier] > 0:
-                howManyRollsForOneUnit(summonerLevel, tier, numgames)
-                howManyRollsForTwoStar(summonerLevel, tier, numgames)
-                howManyRollsForThreeStar(summonerLevel, tier, numgames)
+                levelList.append(tierList)
+                tierList.append(howManyRollsForOneUnit(summonerLevel, tier, numgames))
+                tierList.append(howManyRollsForTwoStar(summonerLevel, tier, numgames))
+                tierList.append(howManyRollsForThreeStar(summonerLevel, tier, numgames))
+    for i in range(len(rollList)):
+        level = i + 1
+        for j in range(len(rollList[i])):
+            tier = j + 1            
+            output += f"{level},{tier},{rollList[i][j][0]},{rollList[i][j][1]},{rollList[i][j][2]}\n"
+        print(output)
