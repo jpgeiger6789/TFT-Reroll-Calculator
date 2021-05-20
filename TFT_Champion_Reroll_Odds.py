@@ -250,7 +250,9 @@ def howManyRolls(summonerLevel, tier, numgames = 400):
         except RollException:
             result = 200
             numRolls[i] = result
-    print(f"At level {summonerLevel+1}, it takes {sum(numRolls) / 1000} rolls to find a given tier {tier+1} unit.")
+    expectedRolls = sum(numRolls) / 1000
+    print(f"At level {summonerLevel+1}, it takes {expectedRolls} rolls to find a given tier {tier+1} unit, for an expected cost of {2*expectedRolls}.")
+
 
 def calculateAllProbabilities(numgames = 400):
     for summonerLevel in range(9):
