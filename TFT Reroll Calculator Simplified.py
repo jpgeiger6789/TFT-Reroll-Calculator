@@ -25,17 +25,24 @@ champOdds = ((100,0,0,0,0),         #lvl1
              (15,20,35,25,5),       #lvl8
              (10,15,30,30,15))      #lvl9
 
+class ImpossibleRollException(Exception):
+    pass
+
 def howManyRerolls(summonerLevel,
                    championTier,
                    championsTaken,
                    championsWanted,
                    championsMissingInTier):
+    summonerOdds = champOdds[summonerLevel]
+    if summonerOdds[championTier] == 0:
+        raise ImpossibleRollException(f"at summoner level {summonerLevel}, cannot hit champion at tier {championTier}.  Chances are: {summonerOdds}")
     championsInTier = deque([origChampQuant[championTier][1] for i in
                    range(origChampQuant[championTier][0])])
     #we'll say the champion we want to hit is the first in the list
     championsInTier[0] -= championsTaken
     #verify enough champions remain to actually hit
-    assert championsInTier[0] > championsWanted
+    if championsInTier[0] < championsWanted:
+        raise ImpossibleRollException(f"can't roll to hit a champion if there aren't enough in the pool.")
     #remove other champions of the same Tier from the pool.  We'll
     #take one from each other champion pool until we're done.
     for i in range(championsMissingInTier):
@@ -70,7 +77,8 @@ def howManyRerolls(summonerLevel,
             print(f"{championsInTier}")
             raise Exception("Too many rolls")
         rolls += 1
-        shopTierList = tuple(random.choices((0,1,2,3,4),champOdds[summonerLevel])[0] for i in range(5))
+        shopTierList = tuple(random.choices((0,1,2,3,4),summonerOdds)[0] for i in range(5))
+        #print(shopTierList)
         for chosenTier in shopTierList:
             #we don't care what the shop populates when our tier isn't chosen
             if chosenTier == championTier:
@@ -170,43 +178,33 @@ def FullCalculation(numRolls):
                                 runXIterations(summonerLevel,
                                                championTier,
                                                championsTaken,
-                                               championsWanted,
+                                               championsWanted+1,
                                                championsMissingInTier,
                                                numRolls)
                                 )
     return summonerLevels
 
 def processRollResults(summonerLevels, numTests):
-    fileName = r"C:\Users\OQA597\OneDrive - SUEZ\Documents\testResults" + str(numTests) + "Tests.csv"
-    printonce = True
+    objShell = win32com.client.Dispatch("WScript.Shell")
+    myDocuments = objShell.SpecialFolders("MyDocuments")
+    fileName = myDocuments + r"C:/Users/OQA597/OneDrive - SUEZ/Documents/testResults" + str(numTests) + "Tests.csv"
     with open(fileName, "w") as outputFile:
         outputFile.write(f"Results from {numTests} tests for each data point\n")
-        outputFile.write("Summoner Level,Champion Tier,Champions Wanted,Champions Taken,Champions Missing,Average,Median,Standard Deviation,Q1Ave,Q1Median,Q1Stdev,Q2Ave,Q2Median,Q2Stdev,Q3Ave,Q3Median,Q3Stdev,Q4Ave,Q4Median,Q4Stdev\n")
+        outputFile.write("Summoner Level,Champion Tier,Champions Wanted,Champions Taken,Champions Missing,Average,Median,Standard Deviation,Q1-Q2Division,Q2-Q3Division,Q3-Q4Division\n")
         for (summonerLevel, championsWantedList) in enumerate(summonerLevels):
             for (championsWanted, champTierList) in enumerate(championsWantedList):
                 for (championTier, champsTakenList) in enumerate(champTierList):
-                    if printonce:
-                        print("champsTakenList:")
-                        print(champsTakenList)
                     for (championsTaken, championsMissingList) in enumerate(champsTakenList):
-                        if printonce:
-                            print("championsMissingList:")
-                            print(championsMissingList)
                         for (championsMissingInTier, rollList) in enumerate(championsMissingList):
-                            if printonce:
-                                print("rollList:")
-                                print(rollList)
-                                printonce = False
                             average = statistics.mean(rollList)
                             median = statistics.median(rollList)
                             stdev = statistics.stdev(rollList)
-                            quantiles = statistics.quantiles(rollList)
-                            averageQuantiles = [statistics.mean(i) for i in quantiles]
-                            medianQuantiles = [statistics.median(i) for i in quantiles]
-                            stdevQuantiles  = [statistics.stdev(i) for i in quantiles]
-                            outputFile.write(f"{summonerLevel},{championTier},{championsWanted},{championsTaken},{championsMissingInTier},{average},{median},{stdev},{averageQuantiles[0]},{medianQuantiles[0]},{stdevQuantiles[0]},{averageQuantiles[1]},{medianQuantiles[1]},{stdevQuantiles[1]},{averageQuantiles[2]},{medianQuantiles[2]},{stdevQuantiles[2]},{averageQuantiles[3]},{medianQuantiles[3]},{stdevQuantiles[3]}\n")
+                            quantiles = statistics.quantiles(rollList,method="inclusive")
+                            outputFile.write(f"{summonerLevel+1},{championTier+1},{championsWanted+1},{championsTaken},{championsMissingInTier},{average},{median},{stdev},{quantiles[0]},{quantiles[1]},{quantiles[2]}\n")
 
 def runXTests(numTests):
+    if numTests < 2:
+        raise ImpossibleRollException("cannot do statistics with a sample size less than 2")
     rollResults = FullCalculation(numTests)
     processRollResults(rollResults, numTests)
         
