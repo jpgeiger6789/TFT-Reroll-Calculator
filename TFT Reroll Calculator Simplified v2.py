@@ -78,7 +78,8 @@ def howManyRerolls(summonerLevel,
         #make sure we don't accidentally end up in an infinite loop
         if rolls == maxRollsBeforeCutoff:
             #for now, we'll just return maxRollsBeforeCutoff, because who cares if it's more than that
-            return maxRollsBeforeCutoff 
+            return maxRollsBeforeCutoff
+        """
             print(f"Too many rolls hit.  Debugging info:")
             print(f"summonerLevel,champTier,desiredChampsTaken,champsWanted,otherChampsMissingInTier")
             print(f"{summonerLevel},{champTier},{desiredChampsTaken},{champsWanted},{otherChampsMissingInTier}")
@@ -91,6 +92,7 @@ def howManyRerolls(summonerLevel,
             print(f"remainingChamps")
             print(f"{champsInTier}")
             raise ImpossibleRollException("Too many rolls")
+        """
         rolls += 1
         shopTierList = tuple(random.choices((0,1,2,3,4),summonerOdds)[0] for i in range(5))
         #print(shopTierList)
@@ -164,7 +166,7 @@ def FullCalculation(numRolls):
         for summonerLevel in range(9))
     try:
         for summonerLevel in range(9):
-            print_memory_usage()
+            #print_memory_usage()
             #print(f"summonerLevel:{summonerLevel}")
             champsWantedList = summonerLevelsList[summonerLevel]
             for champsWanted in range(9):
@@ -218,7 +220,8 @@ def processRollResults(summonerLevels, numTests, outputFolder, e = None):
     fileName = os.path.join(outputFolder, r"TFT_Test_" + str(numTests) + fileErrorFlag + "Tests.csv")
     with open(fileName, "w+") as outputFile:
         outputFile.write(f"Results from {numTests} tests for each data point; cutoff value {maxRollsBeforeCutoff}\n")
-        outputFile.write(f"Sum Level,Champ Tier,Champs Wanted,Desired Champs Taken,Other Champs Missing In Tier,Avg,Median,Std Dev,Q1-Q2 Div,Q2-Q3 Div,Q3-Q4 Div,max,# of {maxRollsBeforeCutoff} rolls\n")
+        quantileList = [9,19,29,39,49,59,69,79,89,94,97,98]
+        outputFile.write(f"Sum Level,Champ Tier,Champs Wanted,Desired Champs Taken,Other Champs Missing In Tier,Avg,Median,Std Dev," + ",".join("Q " + str(quantileList[i] + 1)for i in range(len(quantileList))) + f",max,# of {maxRollsBeforeCutoff} rolls\n")
         for (summonerLevel, champsWantedList) in enumerate(summonerLevels):
             for (champsWanted, champTierList) in enumerate(champsWantedList):
                 for (champTier, desiredChampsTakenList) in enumerate(champTierList):
@@ -227,10 +230,10 @@ def processRollResults(summonerLevels, numTests, outputFolder, e = None):
                             average = statistics.mean(rollList)
                             median = statistics.median(rollList)
                             stdev = statistics.stdev(rollList)
-                            quantiles = statistics.quantiles(rollList,method="inclusive")
+                            quantiles = statistics.quantiles(rollList,n=100,method="inclusive")
                             maxVal = max(rollList)
                             numMaxRolls = rollList.count(maxRollsBeforeCutoff)
-                            outputFile.write(f"{summonerLevel+1},{champTier+1},{champsWanted+1},{desiredChampsTaken},{otherChampsMissingInTier},{average},{median},{stdev},{quantiles[0]},{quantiles[1]},{quantiles[2]},{maxVal},{numMaxRolls}\n")
+                            outputFile.write(f"{summonerLevel+1},{champTier+1},{champsWanted+1},{desiredChampsTaken},{otherChampsMissingInTier},{average},{median},{stdev}," + ",".join(str(quantiles[i]) for i in quantileList) + f"{maxVal},{numMaxRolls}\n")
 
 def runXTests(numTests):
     outputFolder = r"C:\Users\OQA597\OneDrive - SUEZ\Documents"
@@ -252,7 +255,7 @@ def runXTests(numTests):
 def timeTests(maxTests):
     if maxTests < 2:
         raise Exception("must run more than 2 tests")
-    for i in range(2,maxTests+1):
+    for i in range(2,maxTests+1,2):
         startTime = datetime.datetime.now()
         runXTests(i)
         endTime = datetime.datetime.now()
