@@ -33,6 +33,11 @@ def howManyRerolls(summonerLevel,
                    championsTaken,
                    championsWanted,
                    championsMissingInTier):
+    debug = summonerLevel > 1
+    if debug: #change to true for debugging
+        print(f"Debugging info:")
+        print(f"summonerLevel,championTier,championsTaken,championsWanted,championsMissingInTier")
+        print(f"{summonerLevel},{championTier},{championsTaken},{championsWanted},{championsMissingInTier}")
     summonerOdds = champOdds[summonerLevel]
     if summonerOdds[championTier] == 0:
         raise ImpossibleRollException(f"at summoner level {summonerLevel}, cannot hit champion at tier {championTier}.  Chances are: {summonerOdds}")
@@ -45,17 +50,22 @@ def howManyRerolls(summonerLevel,
         raise ImpossibleRollException(f"can't roll to hit a champion if there aren't enough in the pool.")
     #remove other champions of the same Tier from the pool.  We'll
     #take one from each other champion pool until we're done.
+    if debug:        
+        print(f"champOdds")
+        print(f"{champOdds[summonerLevel]}")
+        print(f"availableChampionsInTier")
+        print(f"{origChampQuant[summonerLevel][0]} champions in tier;{origChampQuant[summonerLevel][1]} of each champion available")
     for i in range(championsMissingInTier):
         #we'll always start from the second champion in the pool
         #and go around until we've removed a sufficient amount, or,
         #if none remain, throw an error
         champIndex = 1 + (i % (origChampQuant[championTier][0] - 1))
-        if False: #change to True for debugging
+        if debug: #change to True for debugging
             print(f"removing 1 of champion {champIndex} from pool")
             print(f"{championsInTier}")
         assert championsInTier[champIndex] > 0
         championsInTier[champIndex] -= 1
-        if False: #change to True for debugging
+        if debug: #change to True for debugging
             print(f"{championsInTier}")
     championsFound = 0
     rolls = 0
@@ -63,7 +73,7 @@ def howManyRerolls(summonerLevel,
     while championsWanted > championsFound:
         #make sure we don't accidentally end up in an infinite loop
         if rolls == 250:
-            return 250 #for now, we'll just return 250, because who cares if it's more than 250
+            #return 250 #for now, we'll just return 250, because who cares if it's more than 250
             print(f"Too many rolls hit.  Debugging info:")
             print(f"summonerLevel,championTier,championsTaken,championsWanted,championsMissingInTier")
             print(f"{summonerLevel},{championTier},{championsTaken},{championsWanted},{championsMissingInTier}")
@@ -72,7 +82,7 @@ def howManyRerolls(summonerLevel,
             print(f"champOdds")
             print(f"{champOdds[summonerLevel]}")
             print(f"availableChampionsInTier")
-            print(f"{origChampQuant[summonerLevel][0]} champions in tier;{origChampQuant[summonerLevel][1]} champions available")
+            print(f"{origChampQuant[summonerLevel][0]} champions in tier;{origChampQuant[summonerLevel][1]} of each champion available")
             print(f"remainingChampions")
             print(f"{championsInTier}")
             raise Exception("Too many rolls")
@@ -91,21 +101,6 @@ def howManyRerolls(summonerLevel,
                     championsInTier[0] -= 1
     return rolls
 
-def runXIterationsOld(summonerLevel,
-                   championTier,
-                   championsTaken,
-                   championsWanted,
-                   championsMissingInTier,
-                   iterations):
-    rolls = deque(0 for i in range(iterations))
-    for i in range(iterations):
-        rolls[i] = howManyRerolls(summonerLevel,
-                   championTier,
-                   championsTaken,
-                   championsWanted,
-                   championsMissingInTier)
-    return rolls
-
 
 def runXIterations(summonerLevel,
                    championTier,
@@ -122,7 +117,6 @@ def runXIterations(summonerLevel,
                    championsMissingInTier)
 """
 This function outputs a nested list of the following form:
-
 Summoner Level List: length 9
 [
     Champions Wanted List: length 9
@@ -157,45 +151,6 @@ Summoner Level List: length 9
 ]
 """
 
-
-def FullCalculationOld(numRolls):
-    summonerLevels = deque([] for i in range(9))
-    #iterate through each level 1 to 9
-    for summonerLevel in range(9):
-        #iterate through champions desired - from only wanting one,
-        #to three starring from scratch
-        championsWantedList = deque([] for i in range(9))
-        summonerLevels[summonerLevel] = championsWantedList
-        for (championsWanted, champTierList) in enumerate(championsWantedList):
-            #iterate through each champ Tier
-            for championTier in range(5):
-                #only look at ones we can get
-                if champOdds[summonerLevel][championTier] > 0:
-                    numChampsinTier = origChampQuant[championTier][0]
-                    champsAvailable = origChampQuant[championTier][1]
-                    maxChampsTaken = min(champsAvailable - championsWanted, 9) #usually, not more than 9 of a champion are missing.
-                    #iterate through each option - all available to
-                    #all taken except exactly how many you want
-                    champsTakenList = deque([] for i in range(maxChampsTaken))
-                    champTierList.append(champsTakenList)
-                    for championsTaken in range(maxChampsTaken):
-                        #sort of chose this at random
-                        maxChampionsMissing = 2 * numChampsinTier
-                        championsMissingList = deque([] for i in range(maxChampionsMissing))
-                        champsTakenList[championsTaken] = championsMissingList
-                        for championsMissingInTier in range(maxChampionsMissing):
-                            #print(f"running test.")
-                            #print(f"summonerLevel:{summonerLevel},championsTaken:{championsTaken},championsWanted:{championsWanted},championsMissingInTier:{championsMissingInTier},numRolls:{numRolls}")
-                            rollList = runXIterations(summonerLevel,
-                                               championTier,
-                                               championsTaken,
-                                               championsWanted+1,
-                                               championsMissingInTier,
-                                               numRolls)
-                            championsMissingList[championsMissingInTier] = rollList
-                                
-    return summonerLevels
-
 def FullCalculation(numRolls):
     #vv summoner Levels List
     summonerLevelsList = deque(
@@ -203,8 +158,10 @@ def FullCalculation(numRolls):
         deque([] for championsWanted in range(9))
         for summonerLevel in range(9))
     for summonerLevel in range(9):
+        print(f"summonerLevel:{summonerLevel}")
         championsWantedList = summonerLevelsList[summonerLevel]
         for championsWanted in range(9):
+            print(f"championsWanted:{championsWanted}")
             champTierList = championsWantedList[championsWanted]
             for championTier in range(5):
                 #only look at ones we can get
@@ -222,11 +179,11 @@ def FullCalculation(numRolls):
                         deque(
                             #vv roll List vv
                             deque(0 for roll in range(numRolls))
-                            
+
                             for championsMissing in range(maxChampionsMissing))
                         for championsTaken in range(maxChampsTaken))
 
-                    
+
                     champTierList.append(champsTakenList)
                     for championsTaken in range(maxChampsTaken):
                         championsMissingList = champsTakenList[championsTaken]
@@ -241,13 +198,11 @@ def FullCalculation(numRolls):
                                                championsMissingInTier,
                                                numRolls,
                                                rollList)
-                                
+
     return summonerLevelsList
 
 def processRollResults(summonerLevels, numTests):
-    objShell = win32com.client.Dispatch("WScript.Shell")
-    myDocuments = objShell.SpecialFolders("MyDocuments")
-    fileName = myDocuments + r"C:/Users/OQA597/OneDrive - SUEZ/Documents/testResults" + str(numTests) + "Tests.csv"
+    fileName = myDocuments + r"C:\Users\Jack Geiger\Documents\TFT_Test_" + str(numTests) + "Tests.csv"
     with open(fileName, "w") as outputFile:
         outputFile.write(f"Results from {numTests} tests for each data point\n")
         outputFile.write("Summoner Level,Champion Tier,Champions Wanted,Champions Taken,Champions Missing,Average,Median,Standard Deviation,Q1-Q2Division,Q2-Q3Division,Q3-Q4Division\n")
@@ -267,5 +222,3 @@ def runXTests(numTests):
         raise ImpossibleRollException("cannot do statistics with a sample size less than 2")
     rollResults = FullCalculation(numTests)
     processRollResults(rollResults, numTests)
-        
-                            
