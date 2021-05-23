@@ -233,7 +233,7 @@ def processRollResults(summonerLevels, numTests, outputFolder, e = None):
                             quantiles = statistics.quantiles(rollList,n=100,method="inclusive")
                             maxVal = max(rollList)
                             numMaxRolls = rollList.count(maxRollsBeforeCutoff)
-                            outputFile.write(f"{summonerLevel+1},{champTier+1},{champsWanted+1},{desiredChampsTaken},{otherChampsMissingInTier},{average},{median},{stdev}," + ",".join(str(quantiles[i]) for i in quantileList) + f"{maxVal},{numMaxRolls}\n")
+                            outputFile.write(f"{summonerLevel+1},{champTier+1},{champsWanted+1},{desiredChampsTaken},{otherChampsMissingInTier},{average},{median},{stdev}," + ",".join(str(quantiles[i]) for i in quantileList) + f",{maxVal},{numMaxRolls}\n")
 
 def runXTests(numTests):
     outputFolder = r"C:\Users\OQA597\OneDrive - SUEZ\Documents"
