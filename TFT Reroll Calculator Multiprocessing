@@ -1,0 +1,427 @@
+import random
+import statistics
+import datetime
+import os
+import psutil
+import sys
+import multiprocessing as mp
+import traceback
+
+debug = True
+
+#I use a ton of deque objects cuz I like having a mutable list with a fixed length.
+from collections import deque
+
+tierList = (0,1,2,3,4)
+starLevelLookup = (1,3,9)
+starList = (0,1,2)
+maxRollsBeforeCutoff = 250
+
+#champ tier:(number of different champs in that tier:instances of each champ)
+origChampQuant = ((13,29), (13,22), (13,18), (11,12), (8,10))
+
+#given a summoner level, what is the likelihood to get a champ of a
+#given tier?
+#           (%T1,%T2,%T3,%T4,%T5)
+champOdds = ((100,0,0,0,0),         #lvl1
+             (100,0,0,0,0),         #lvl2
+             (75,25,0,0,0),         #lvl3
+             (55,30,15,0,0),        #lvl4
+             (45,33,20,2,0),        #lvl5
+             (35,35,25,5,0),        #lvl6
+             (19,35,30,15,1),       #lvl7
+             (15,20,35,25,5),       #lvl8
+             (10,15,30,30,15))      #lvl9
+
+class ImpossibleRollException(Exception):
+    pass
+
+def howManyRerolls(summonerLevel: int,
+                   champTier: int,
+                   desiredChampsTaken: int,
+                   champsWanted: int,
+                   otherChampsMissingInTier: int):
+    global debug
+    if debug:
+        print(f"howManyRerolls Debugging info:")
+        print(f"summonerLevel,champTier,desiredChampsTaken,champsWanted,otherChampsMissingInTier")
+        print(f"{summonerLevel},{champTier},{desiredChampsTaken},{champsWanted},{otherChampsMissingInTier}")
+    summonerOdds = champOdds[summonerLevel]
+    if summonerOdds[champTier] == 0:
+        raise ImpossibleRollException(f"at summoner level {summonerLevel}, cannot hit champ at tier {champTier}.  Chances are: {summonerOdds}")
+    champsInTier = deque([origChampQuant[champTier][1] for i in
+                   range(origChampQuant[champTier][0])])
+    #we'll say the champ we want to hit is the first in the list
+    champsInTier[0] -= desiredChampsTaken
+    #verify enough champs remain to actually hit
+    if champsInTier[0] < champsWanted:
+        raise ImpossibleRollException(f"can't roll to hit a champ if there aren't enough in the pool.")
+    #remove other champs of the same Tier from the pool.  We'll
+    #take one from each other champ pool until we're done.
+    if debug:        
+        print(f"champOdds")
+        print(f"{champOdds[summonerLevel]}")
+        print(f"availableChampsInTier")
+        print(f"{origChampQuant[summonerLevel][0]} champs in tier;{origChampQuant[summonerLevel][1]} of each champ available")
+    for i in range(otherChampsMissingInTier):
+        #we'll always start from the second champ in the pool
+        #and go around until we've removed a sufficient amount, or,
+        #if none remain, throw an error
+        champIndex = 1 + (i % (origChampQuant[champTier][0] - 1))
+        if debug: #change to True for debugging
+            print(f"removing 1 of champ {champIndex} from pool")
+            print(f"{champsInTier}")
+        assert champsInTier[champIndex] > 0
+        champsInTier[champIndex] -= 1
+        if debug: #change to True for debugging
+            print(f"{champsInTier}")
+    champsFound = 0
+    rolls = 0
+    printonce = True
+    while champsWanted > champsFound:
+        #make sure we don't accidentally end up in an infinite loop
+        if rolls == maxRollsBeforeCutoff:
+            #for now, we'll just return maxRollsBeforeCutoff, because who cares if it's more than that
+            if not debug:
+                return maxRollsBeforeCutoff
+        
+            print(f"Too many rolls hit.  Debugging info:")
+            print(f"summonerLevel,champTier,desiredChampsTaken,champsWanted,otherChampsMissingInTier")
+            print(f"{summonerLevel},{champTier},{desiredChampsTaken},{champsWanted},{otherChampsMissingInTier}")
+            print(f"champs found")
+            print(f"{champsFound}")
+            print(f"champOdds")
+            print(f"{champOdds[summonerLevel]}")
+            print(f"availableChampsInTier")
+            print(f"{origChampQuant[summonerLevel][0]} champs in tier;{origChampQuant[summonerLevel][1]} of each champ available")
+            print(f"remainingChamps")
+            print(f"{champsInTier}")
+            raise ImpossibleRollException("Too many rolls")
+        
+        rolls += 1
+        shopTierList = tuple(random.choices((0,1,2,3,4),summonerOdds)[0] for i in range(5))
+        #print(shopTierList)
+        for chosenTier in shopTierList:
+            #we don't care what the shop populates when our tier isn't chosen
+            if chosenTier == champTier:
+                numChamps = origChampQuant[champTier][0]
+                availableChamps = tuple(range(numChamps))
+                champSelected = random.choices(availableChamps,champsInTier)[0]
+                #we chose the first champ as the one we're interested in
+                if champSelected == 0:
+                    champsFound += 1
+                    champsInTier[0] -= 1
+    return rolls
+
+
+def runXIterations(summonerLevel: int,
+                   champTier: int,
+                   desiredChampsTaken: int,
+                   champsWanted: int,
+                   otherChampsMissingInTier: int,
+                   iterations: int,
+                   rollList: list):
+    if debug: print(f"runXIterations: summonerLevel:{summonerLevel}, champTier:{champTier}, desiredChampsTaken:{desiredChampsTaken}, champsWanted:{champsWanted}, otherChampsMissingInTier:{otherChampsMissingInTier}, iterations:{iterations}, rollList: list of length {len(rollList)}")
+    for i in range(iterations):        
+        rollList[i] = howManyRerolls(summonerLevel,
+                   champTier,
+                   desiredChampsTaken,
+                   champsWanted,
+                   otherChampsMissingInTier)
+
+class rollResultsObject():
+    def __init__(self,summonerLevel: int, champsWanted: int, champTierResults: list, exceptionLog: str = ""):
+        global debug
+        
+        if debug:
+            exceptionExists = exceptionLog==""
+            print(f"rollResultsObject instantiation: {summonerLevel}:summonerLevel, {champsWanted}:champsWanted, champTierList:List of len {len(champTierResults)}, exception raised?:{exceptionExists}")
+        self.summonerLevel = summonerLevel
+        self.champsWanted = champsWanted
+        self.champTierResults = champTierResults
+        if exceptionLog != "":
+            self.exceptionLog = f"summonerLevel:{summonerLevel}; champsWanted:{champsWanted}; champTierList length:{len(champTierResults)}\n" + exceptionLog
+        else:
+            self.exceptionLog = ""
+
+def MultiThreadCalculation(numRolls: int):
+    """
+    This function outputs a nested list of the following form:
+    Summoner Level List: length 9
+    [
+        Champs Wanted List: length 9
+        [
+            Champ Tiers List: length 1-5
+            depends on available tiers at summoner level
+            [
+                Desired Champs Taken List: length variable depending on how many champs are in the tier
+                [
+                    Same Tier Champs Missing List: length variable depending on how many champs are in the tier
+                    [
+                        Roll List: length = numRolls parameter
+                        [
+                            Roll 1 Result
+                            ...
+                            Roll numRolls Result
+                        ]
+                        ...num champs missing
+                        []Roll list N
+                    ]
+                    ...num champs Taken
+                    []champs Missing List N
+                ]
+                ...champ tiers
+                []champ tier list N
+            ]
+            ...9
+            []champ wanted list 9
+        ]
+        ...9
+        []Summoner Level 9
+    ]
+    """
+
+    global debug
+    if debug: print(f"MultiThreadCalculation numRolls:{numRolls}")
+    if debug: stopAfterTwo = 0
+    num_workers = mp.cpu_count()
+    #the num_workers parameter is extraneous, as that is the default.  Leaving it to make it explicit what is happening (and so we can mess around with this number).
+    pool = mp.Pool(num_workers)
+    if debug: queue = mp.Queue(maxsize=2)
+    else: queue = mp.Queue(maxsize=81)
+    #vv summoner Levels List
+    rollResultsList = deque(
+        #vv champs Wanted List vv
+        deque([] for champsWanted in range(9))
+        for summonerLevel in range(9))
+    for summonerLevel in range(9):
+        if debug: print_memory_usage()
+        if debug: print(f"summonerLevel:{summonerLevel}")
+        for champsWanted in range(9):
+            if debug: print(f"champsWanted:{champsWanted}")
+#----------------------------------------------------------------------------------------------------------------------------------------------
+            if debug: stopAfterTwo += 1
+            pool.apply_async(workerProcessCalculation, args = (summonerLevel, champsWanted, numRolls, queue))
+            if debug:
+                if stopAfterTwo == 2:
+                    break
+    #num_workers processes have been started, which will return 81 results.  Now, to wait for them.
+    pool.close()
+    pool.join()
+    if debug: print("processingResults")
+    for i in range(queue._maxsize):
+        if debug: print("processing result {i+1)")
+        resultsObject = queue.get()
+        rollResultsList[result.summonerLevel][result.champsWanted] = resultsObject.rollResults
+        if resultsObject.exceptionLog != "":
+            print(resultsObject.exceptionLog)
+    return rollResultsList
+#----------------------------------------------------------------------------------------------------------------------------------------------
+
+def workerProcessCalculation(summonerLevel: int, champsWanted: int, numRolls: int, queue: mp.Queue):
+    global debug    
+    if debug: print("workerProcessCalculation: summonerLevel:{summonerLevel}, champsWanted:{champsWanted}, numRolls:{numRolls}")
+    champTierResults = []
+    try:
+        for champTier in range(5):
+            #only look at ones we can get
+            if champOdds[summonerLevel][champTier] > 0:
+                numChampsinTier = origChampQuant[champTier][0]
+                champsAvailable = origChampQuant[champTier][1]
+                #iterate through every available option - from none missing to exactly enough remaining to get the number you want
+                maxDesiredChampsTaken = champsAvailable - champsWanted
+                #we're going to go by multiples of numChampsinTier * (champsAvailable - 1) // 30 here - we will always have 30 data points.  This is to minimize file size.
+                maxOtherChampsMissingInTier = champsAvailable * (numChampsinTier - 1)
+                countBy = maxOtherChampsMissingInTier // 30
+                overshoot = maxOtherChampsMissingInTier % countBy
+                #this is to make the range(maxOtherChampsMissingInTier) call less confusing
+                maxOtherChampsMissingInTier -= overshoot
+
+                #iterate through each option - all available to
+                #all taken except exactly how many you want
+                #vv desired champs Taken List vv
+                desiredChampsTakenList = deque(
+                    #vv other champs missing in Tier list vv
+                    deque(
+                        #vv roll List vv
+                        deque(0 for roll in range(numRolls))
+
+                        for otherChampsMissingInTier in range(30))
+                    for desiredChampsTaken in range(maxDesiredChampsTaken))
+
+
+                champTierResults.append(desiredChampsTakenList)
+                for desiredChampsTaken in range(maxDesiredChampsTaken):
+                    otherChampsMissingInTierList = desiredChampsTakenList[desiredChampsTaken]
+                    for otherChampsMissingInTier in range(0, maxOtherChampsMissingInTier, countBy):
+                        rollList = otherChampsMissingInTierList[otherChampsMissingInTier]
+                        if debug: print(f"running test.")
+                        if debug: print(f"summonerLevel:{summonerLevel},champsTaken:{champsTaken},champsWanted:{champsWanted},champsMissingInTier:{champsMissingInTier},numRolls:{numRolls}")
+                        runXIterations(summonerLevel,
+                                           champTier,
+                                           desiredChampsTaken,
+                                           champsWanted+1,
+                                           otherChampsMissingInTier,
+                                           numRolls,
+                                           rollList)
+    except Exception as e:
+        exceptionLog = log_exception(e)
+    finally:
+#----------------------------------------------------------------------------------------------------------------------------------------------        
+        resultsObject = rollResultsObject(summonerLevel, champsWanted, champTierResults, exceptionLog)
+        queue.put(resultsObject)
+#----------------------------------------------------------------------------------------------------------------------------------------------
+
+class statisticsResultsObject():
+    def __init__(self,summonerLevel: int, champsWanted: int, champTierResults: list):
+        global debug
+        
+        if debug:
+            print(f"statisticsResultsObject instantiation: {summonerLevel}:summonerLevel, {champsWanted}:champsWanted, champTierList:List of length {len(champTierList)}")
+        self.summonerLevel = summonerLevel
+        self.champsWanted = champsWanted
+        self.champTierResults = champTierResults
+
+def collectRollStatisticsMultiThread(rollResultsList: deque, numTests: int):
+    global debug
+    if debug: print(f"collectRollStatisticsMultiThread: rollResultsList: list of length {len(rollResultsList)}, numTests: {numTests}")
+    if debug: stopAfterTwo = 0
+    num_workers = mp.cpu_count()
+    #the num_workers parameter is extraneous, as that is the default.  Leaving it to make it explicit what is happening (and so we can mess around with this number).
+    pool = mp.Pool(num_workers)
+    if debug: queue = mp.Queue(maxsize=2)
+    else: queue = mp.Queue(maxsize=81)
+    #vv summoner Levels List
+    rollStatisticsList = deque(
+        #vv champs Wanted List vv
+        deque([] for champsWanted in range(len(rollResultsList[summonerLevel])))
+        for summonerLevel in range(len(rollResultsList)))
+    for (summonerLevel, champsWantedList) in enumerate(rollStatisticsList):
+        if debug: print(f"summonerLevel:{summonerLevel}")
+        for (champsWanted, champTierRollResultsList) in enumerate(champsWantedList):
+            if debug: print(f"champsWanted:{champsWanted}")
+#----------------------------------------------------------------------------------------------------------------------------------------------
+            pool.apply_async(workerProcessCalculation, args = (champTierRollResultsList, summonerLevel, champsWanted, numRolls, queue))
+    #num_workers processes have been started, which will return 81 results.  Now, to wait for them.
+    pool.close()
+    pool.join()
+    if debug: print("processingResults")
+    for i in range(queue._maxsize):
+        if debug: print("processing result {i+1)")
+        resultsObject = queue.get()
+        rollStatisticsList[result.summonerLevel][result.champsWanted] = result.champTierResults
+    return rollStatisticsList
+#----------------------------------------------------------------------------------------------------------------------------------------------
+
+def workerProcessRollResults(champTierRollResultsList: list, summonerLevel: int, champsWanted: int, numRolls: int, queue: mp.Queue):
+    global debug
+    champTierResults = []
+    if debug: print(f"workerProcessRollResults: champTierRollResultsList:List of length {len(champTierRollResultsList)}, summonerLevel:{summonerLevel}, champsWanted: {champsWanted}, numRolls:{numRolls}")
+    for (champTier, desiredChampsTakenList) in enumerate(champTierRollResultsList):
+        numChampsinTier = origChampQuant[champTier][0]
+        champsAvailable = origChampQuant[champTier][1]
+        #iterate through every available option - from none missing to exactly enough remaining to get the number you want
+        maxDesiredChampsTaken = champsAvailable - champsWanted
+        #we're going to go by multiples of numChampsinTier * (champsAvailable - 1) // 30 here - we will always have 30 data points.  This is to minimize file size.
+        maxOtherChampsMissingInTier = champsAvailable * (numChampsinTier - 1)
+        countBy = maxOtherChampsMissingInTier // 30
+        overshoot = maxOtherChampsMissingInTier % countBy
+        #this is to make the range(maxOtherChampsMissingInTier) call less confusing
+        maxOtherChampsMissingInTier -= overshoot
+
+        #iterate through each option - all available to
+        #all taken except exactly how many you want
+        #vv desired champs Taken List vv
+        desiredChampsTakenList = deque(
+            #vv other champs missing in Tier list vv
+            deque("" for otherChampsMissingInTier in range(30))
+            for desiredChampsTaken in range(maxDesiredChampsTaken))
+        champTierResults.append(desiredChampsTakenList)
+        for (desiredChampsTaken, otherChampsMissingInTierList) in enumerate(desiredChampsTakenList):
+            for (otherChampsMissingInTier_unedited, rollList) in enumerate(otherChampsMissingInTierList):
+                otherChampsMissingInTier = otherChampsMissingInTier_unedited * countBy
+                average = statistics.mean(rollList)
+                median = statistics.median(rollList)
+                stdev = statistics.stdev(rollList)
+                quantiles = statistics.quantiles(rollList,n=100,method="inclusive")
+                maxVal = max(rollList)
+                numMaxRolls = rollList.count(maxRollsBeforeCutoff)
+                result = f"{summonerLevel+1},{champTier+1},{champsWanted+1},{desiredChampsTaken},{otherChampsMissingInTier},{average},{median},{stdev}," + ",".join(str(quantiles[i]) for i in quantileList) + f",{maxVal},{numMaxRolls}\n"
+                if debug: print(result)
+                champTierResults[champTier][desiredChampsTaken][otherChampsMissingInTier_unedited] = result
+    resultsObject = statisticsResultsObject(summonerLevel, champsWanted, champTierResults)
+    queue.put(result)
+
+def printStatisticsToFile(rollStatisticsList: deque, numTests: int, outputFolder: str):
+    global debug
+    if debug: print(f"printStatisticsToFile: rollStatisticsList: List of length {len(rollStatisticsList)}, numTests: {numTests}, outputFolder: {outputFolder}")
+    fileName = os.path.join(outputFolder, r"TFT_Test_" + str(numTests) + fileErrorFlag + "Tests.csv")
+    with open(fileName, "w+") as outputFile:
+        outputFile.write(f"Results from {numTests} tests for each data point; cutoff value {maxRollsBeforeCutoff}\n")
+        quantileList = [9,19,29,39,49,59,69,79,89,94,97,98]
+        outputFile.write(f"Sum Level,Champ Tier,Champs Wanted,Desired Champs Taken,Other Champs Missing In Tier,Avg,Median,Std Dev," + ",".join("Q " + str(quantileList[i] + 1)for i in range(len(quantileList))) + f",max,# of {maxRollsBeforeCutoff} rolls\n")
+        for (summonerLevel, champsWantedList) in enumerate(rollStatisticsList):
+            for (champsWanted, champTierList) in enumerate(champsWantedList):
+                for (champTier, desiredChampsTakenList) in enumerate(champTierList):
+                    for (desiredChampsTaken, otherChampsMissingInTierList) in enumerate(desiredChampsTakenList):
+                        for (otherChampsMissingInTier_unedited, result) in enumerate(otherChampsMissingInTierList):
+                            outputFile.write(result)
+
+def runXTests(numTests: int):
+    global debug
+    if debug: print(f"runXTests numTests:{numTests}")
+    outputFolder = r"C:\Users\OQA597\OneDrive - SUEZ\Documents"
+    if not os.path.exists(outputFolder):
+        raise Exception(f"Folder {outputFolder} does not exist")
+    if numTests < 2:
+        raise Exception(f"numTests ({numTests}) cannot be less than 2.")
+    rollResultsList = MultiThreadCalculation(numTests)
+    if debug: print("-" * 40 + "\n")
+    if debug: print("ROLL RESULTS FINISHED")
+    if debug: print("-" * 40 + "\n")
+    rollStatisticsList = collectRollStatisticsMultiThread(rollResultsList, numTests)
+    if debug: print("-" * 40 + "\n")
+    if debug: print("STATISTICAL ANALYSIS FINISHED")
+    if debug: print("-" * 40 + "\n")
+    printStatisticsToFile(rollStatisticsList, numTests, outputFolder)
+
+def timeTests(maxTests: int):
+    global debug
+    if debug: print(f"timeTests maxTests:{maxTests}")
+    if maxTests < 2:
+        raise Exception("must run more than 2 tests")
+    for i in range(2,maxTests+1,2):
+        startTime = datetime.datetime.now()
+        runXTests(i)
+        endTime = datetime.datetime.now()
+        deltaTime = endTime - startTime
+        print(f"Time to run {i} tests: {deltaTime}")
+
+#https://airbrake.io/blog/python/memoryerror
+def print_memory_usage():
+    """Prints current memory usage stats.
+    See: https://stackoverflow.com/a/15495136
+
+    :return: None
+    """
+    global debug
+    if debug: print("print_memory_usage()")
+    PROCESS = psutil.Process(os.getpid())
+    MEGA = 10 ** 6 #information will be shown as megabytes
+    total, available, percent, used, free = psutil.virtual_memory()
+    total, available, used, free = int(total / MEGA), int(available / MEGA), int(used / MEGA), int(free / MEGA)
+    proc = int(PROCESS.memory_info()[1] / MEGA)
+    print(f"process = {proc} MB total = {total} MB available = {available} MB used = {used} MB free = {free} MB percent = {percent} MB")
+
+
+def log_exception(exception: Exception):
+    """Prints the passed BaseException to the console, including traceback.
+
+    :param exception: The BaseException to output.
+    :param expected: Determines if BaseException was expected.
+    """
+    global debug
+    if debug: print(f"log_exception()")
+    exceptionTraceback = "".join(traceback.extract_tb(exception.__traceback__).format())
+    output = f"{type(exception).__name__}: {exception}\nTraceback:\n{exceptionTraceback}"
+    return output
