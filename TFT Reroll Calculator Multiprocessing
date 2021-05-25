@@ -161,7 +161,7 @@ class rollResultsObject():
             self.exceptionLog = ""
 """
 
-def MultiThreadCalculation(numTests: int):
+def MultiProcessCalculation(numTests: int):
     """
     This function outputs a nested list of the following form:
     Summoner Level List: length 9
@@ -199,7 +199,7 @@ def MultiThreadCalculation(numTests: int):
     """
 
     global callerDebug
-    #if callerDebug: print(f"MultiThreadCalculation numTests:{numTests}")
+    #if callerDebug: print(f"MultiProcessCalculation numTests:{numTests}")
     if callerDebug: stopAfterTwo = 0
     num_workers = mp.cpu_count()
     #the num_workers parameter is extraneous, as that is the default.  Leaving it to make it explicit what is happening (and so we can mess around with this number).
@@ -328,9 +328,9 @@ class statisticsResultsObject():
         self.descriptor = f"statisticsResultsObject: {summonerLevel}:summonerLevel, {champsWanted}:champsWanted, champTierList:List of length {len(champTierList)}"
 """
 
-def collectRollStatisticsMultiThread(rollResultsList: deque, numTests: int):
+def collectRollStatisticsMultiProcess(rollResultsList: deque, numTests: int):
     global callerDebug
-    if callerDebug: print(f"collectRollStatisticsMultiThread: rollResultsList: list of length {len(rollResultsList)}, numTests: {numTests}")
+    if callerDebug: print(f"collectRollStatisticsMultiProcess: rollResultsList: list of length {len(rollResultsList)}, numTests: {numTests}")
     if callerDebug: stopAfterTwo = 0
     num_workers = mp.cpu_count()
     #the num_workers parameter is extraneous, as that is the default.  Leaving it to make it explicit what is happening (and so we can mess around with this number).
@@ -452,11 +452,11 @@ def runXTests(numTests: int):
         raise Exception(f"Folder {outputFolder} does not exist")
     if numTests < 2:
         raise Exception(f"numTests ({numTests}) cannot be less than 2.")
-    rollResultsList = MultiThreadCalculation(numTests)
+    rollResultsList = MultiProcessCalculation(numTests)
     if callerDebug: print("-" * 40 + "\n")
     if callerDebug: print("ROLL RESULTS FINISHED")
     if callerDebug: print("-" * 40 + "\n")
-    rollStatisticsList = collectRollStatisticsMultiThread(rollResultsList, numTests)
+    rollStatisticsList = collectRollStatisticsMultiProcess(rollResultsList, numTests)
     if callerDebug: print("-" * 40 + "\n")
     if callerDebug: print("STATISTICAL ANALYSIS FINISHED")
     if callerDebug: print("-" * 40 + "\n")
