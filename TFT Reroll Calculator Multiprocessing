@@ -6,6 +6,8 @@ import psutil
 import sys
 import multiprocessing as mp
 import traceback
+import tkinter as tk
+import ctypes
 
 smallBatch = False
 callerDebug = False
@@ -442,6 +444,7 @@ def printStatisticsToFile(rollStatisticsList: deque, numTests: int, outputFolder
                             outputFile.write(result)
 
 def runXTests(numTests: int):
+    myComputerIsNowAnInsomniac()
     global callerDebug
     if callerDebug: print(f"runXTests numTests:{numTests}")
     outputFolder = r"C:\Users\OQA597\OneDrive - SUEZ\Documents"
@@ -458,13 +461,14 @@ def runXTests(numTests: int):
     if callerDebug: print("STATISTICAL ANALYSIS FINISHED")
     if callerDebug: print("-" * 40 + "\n")
     printStatisticsToFile(rollStatisticsList, numTests, outputFolder)
+    youWorkedHardLittleComputerNowYouMaySleep()
 
-def timeTests(maxTests: int):
+def timeTests(maxTests: int, minTests: int = 2):
     global callerDebug
     if callerDebug: print(f"timeTests maxTests:{maxTests}")
-    if maxTests < 2:
+    if maxTests < 2 or minTests < 2:
         raise Exception("must run more than 2 tests")
-    for i in range(2,maxTests+1,2):
+    for i in range(minTests,maxTests+1,2):
         startTime = datetime.datetime.now()
         runXTests(i)
         endTime = datetime.datetime.now()
@@ -499,3 +503,11 @@ def log_exception(exception: Exception):
     exceptionTraceback = "".join(traceback.extract_tb(exception.__traceback__).format())
     output = f"{type(exception).__name__}: {exception}\nTraceback:\n{exceptionTraceback}"
     return output
+
+
+#https://stackoverflow.com/questions/57647034/prevent-sleep-mode-python-wakelock-on-python
+def myComputerIsNowAnInsomniac():
+    ctypes.windll.kernel32.SetThreadExecutionState(0x80000002)
+
+def youWorkedHardLittleComputerNowYouMaySleep():
+    ctypes.windll.kernel32.SetThreadExecutionState(0x80000000)
